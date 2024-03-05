@@ -1,7 +1,8 @@
-/** Graber / Bali / Somfy Shade Driver v2 
+/** Graber / Bali / Somfy Shade Driver v2.1
  *  Device Type:	Z-Wave Window Shade
+ *  V2.1 Author :    Evan Callia
  *  V2 Author :      Cameron Moten
- *  V1 Author : Tim Yuhl
+ *  V1 Author : 	 Tim Yuhl
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation
  *  files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy,
@@ -23,7 +24,9 @@
  *  6/2/23 - Added Ability for it to act like a Dimmer Switch in HomeKit/Hubitat
  *         - Added Ability to set State Values to not allow it to exceed a certain Up & Down Max per Blind so users don't have to set it per window with a remote.
  *         - Add Support if WindowShadeLevel is ever added to Hubitat like smartthings.
- *          - Added Support for Custom Battery Max Limits (To support Re-chargable Batteries) you can now set what "Fresh" batteries are so you don't get annoying low battery alerts.
+ *         - Added Support for Custom Battery Max Limits (To support Re-chargable Batteries) you can now set what "Fresh" batteries are so you don't get annoying low battery alerts.
+ *  3/4/24 - Add "opening" and "closing" status
+ *         - Handle "Start Level Change" and "Stop Level Change" for full dimmer compatibility
  */
 
 import groovy.transform.Field
@@ -230,6 +233,29 @@ def stopPositionChange() {
 	}
 }
 
+def startLevelChange(position) {
+	log("startLevelChange() called with position: ${position}", "trace")
+
+	String pos
+	switch (position.toUpperCase()) {
+		case "UP":
+			pos = "open"
+			break
+		case "DOWN":
+			pos = "close"
+			break
+		default:
+			throw new Exception("Invalid position value specified")
+	}
+
+	startPositionChange(pos)
+}
+
+def stopLevelChange() {
+	log("stopLevelChange() called", "trace")
+	stopPositionChange()
+}
+
 ///
 // Event Handlers
 ///
@@ -308,9 +334,27 @@ private void scheduleBatteryReport() {
 
 private void setShadeLevel(value)
 {
+	Short curPos = device.currentValue("position")
 	Short level = Math.max(Math.min(value as Short, getMaxOpen()), getMaxClosed())
     log("Set Shade Level ${level}", "info")
+
+	if (level == curPos) {
+		return // nothing to be done
+	}
+
+	String shadeText
+	String positionText
+	if (curPos > level) {
+		shadeText = "closing"
+		positionText = "${device.getDisplayName()} is closing"
+	} else {
+		shadeText = "opening"
+		positionText = "${device.getDisplayName()} is opening"
+	}
+
 	try {
+		sendEvent(getEventMap("label", shadeText, null, null, positionText, true))
+		sendEvent(getEventMap("windowShade", shadeText, null, null, positionText, true))
 		sendHubCommand(new hubitat.device.HubAction(zwave.switchMultilevelV1.switchMultilevelSet(value: level).format(), hubitat.device.Protocol.ZWAVE))
 	}
 	catch(e) {
@@ -332,10 +376,23 @@ private void startLevelChangeHelper(String position)
 	if (posValue == curPos) {
 		return // nothing to be done
 	}
+
 	// false if increasing, true if decreasing
 	Boolean upDn = (curPos >= posValue)
 
+	String shadeText
+	String positionText
+	if (!upDn) {
+		shadeText = "opening"
+		positionText = "${device.getDisplayName()} is opening"
+	} else {
+		shadeText = "closing"
+		positionText = "${device.getDisplayName()} is closing"
+	}
+
 	try {
+		sendEvent(getEventMap("label", shadeText, null, null, positionText, true))
+		sendEvent(getEventMap("windowShade", shadeText, null, null, positionText, true))
 		sendHubCommand(new hubitat.device.HubAction(zwave.switchMultilevelV1.switchMultilevelStartLevelChange(ignoreStartLevel: true,
 				startLevel: 0, upDown: upDn).format(), hubitat.device.Protocol.ZWAVE))
 	}
@@ -356,7 +413,7 @@ private void getPositionReport() {
 
 private shadeEvents(value, String type) {
 	Short positionVal = value
-	String positionText;
+	String positionText
 	String switchText
 	String shadeText
 	if (positionVal+1 >= getMaxOpen()) { // e.g. 94 + 1 >= 95 (Set Value)  -- it tends to be 1% off 

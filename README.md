@@ -1,20 +1,24 @@
 # Graber, Bali, or Somfy Shade Driver
  Hubitat Driver For Graber, Bali or Somfy Virtual Cord Z-Wave Shades
 
+- 2.1 Author : Evan Callia (@user5830 on Hubitat Community Forums)
 - 2.0 Author : Cameron Moten (@CamM on Hubitat Community Forums)
 - 1.0 Author: Tim Yuhl (@WindowWasher on the Hubitat Community Forums)
 
 **Features:**
 
-1. Supports Open, Close, On, Off, Set Position, Start Position Change, and Stop Position Change commands
+1. Supports Open, Close, On, Off, Set Position, Start Position Change, Stop Position Change, Set Level Change, and Stop Level Change commands 
 2. Battery Level reporting
 3. Tested with Rule Machine, webCoRE and Hubitat Alexa integration
+
+**New Features Version 2.1:**
+1. Add "opening" and "closing" status
+2. Handle "Start Level Change" and "Stop Level Change" for full dimmer compatibility
 
 **New Features Version 2.0:**
 1. Added Ability for it to act like a Dimmer Switch in HomeKit/Hubitat (Set % Open via HomeKit or Hubitat App Natively)
 2. Added Ability to Set MIN & MAX Open Values to not allow it to exceed a certain Up & Down Max per Blind so users don't have to set it per window with a remote.
 3. Add Support if WindowShadeLevel is ever added to Hubitat like SmartThings.
-
 
 
 **To use this driver:**
@@ -28,7 +32,7 @@
 
 **Notes:**
 
-1. It has only been tested with the Graber Virtual Cord Shades but Somfy/Spring Window Fashions is the Zwave device which is shared across products so it should work for any that match. But no guarantee on all shades.
+1. It has only been tested with the Graber Virtual Cord Shades and Bali Roller Shades, but Somfy/Spring Window Fashions is the Zwave device which is shared across products so it should work for any that match. But no guarantee on all shades.
 
 2. Secure Z-Wave communication is not currently supported. The Graber shades don't pair with security, so this shouldn't be an issue with normal installations.
 

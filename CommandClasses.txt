@@ -32,7 +32,8 @@ inClusters reported in driver screen:
 Graber Driver Command Buttons:
 
 Close, Configure, Initialize, Off, On, Open, Refresh, Set Level, Set Position, 
-Start Position Change (open, close), Stop Position Change
+Start Position Change (open, close), Stop Position Change,
+Start Level Change (up, down), Stop Level Change
 
 Generic Z-Wave Shade Command Buttons:
 Close, Configure, Off, On, Open, Refresh, Set Position,
