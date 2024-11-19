@@ -1,7 +1,7 @@
 # Graber, Bali, or Somfy Shade Driver
  Hubitat Driver For Graber, Bali or Somfy Virtual Cord Z-Wave Shades
 
-- 2.1 Author : Evan Callia (@user5830 on Hubitat Community Forums)
+- 2.1 Author : Evan Callia (@evcallia on Hubitat Community Forums)
 - 2.0 Author : Cameron Moten (@CamM on Hubitat Community Forums)
 - 1.0 Author: Tim Yuhl (@WindowWasher on the Hubitat Community Forums)
 
