@@ -1,7 +1,8 @@
-/** Graber / Bali / Somfy Shade Driver v2 
+/** Graber / Bali / Somfy Shade Driver v2.1
  *  Device Type:	Z-Wave Window Shade
+ *  V2.1 Author :    Evan Callia
  *  V2 Author :      Cameron Moten
- *  V1 Author : Tim Yuhl
+ *  V1 Author : 	 Tim Yuhl
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation
  *  files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy,
@@ -23,14 +24,17 @@
  *  6/2/23 - Added Ability for it to act like a Dimmer Switch in HomeKit/Hubitat
  *         - Added Ability to set State Values to not allow it to exceed a certain Up & Down Max per Blind so users don't have to set it per window with a remote.
  *         - Add Support if WindowShadeLevel is ever added to Hubitat like smartthings.
- *          - Added Support for Custom Battery Max Limits (To support Re-chargable Batteries) you can now set what "Fresh" batteries are so you don't get annoying low battery alerts.
+ *         - Added Support for Custom Battery Max Limits (To support Re-chargable Batteries) you can now set what "Fresh" batteries are so you don't get annoying low battery alerts.
+ *  V2.1:
+ *  3/4/24 - Add "opening" and "closing" status
+ *         - Handle "Start Level Change" and "Stop Level Change" for full dimmer compatibility
  */
 
 import groovy.transform.Field
 
 @Field static final Map commandClassVersions = [
-		0x20: 1,    //basic
-		0x26: 1,    //switchMultiLevel
+		0x20: 1,    // basic
+		0x26: 1,    // switchMultiLevel
 		0x5E: 2,    // ZwavePlusInfo
 		0x80: 1     // Battery
 ]
@@ -65,6 +69,7 @@ metadata {
 
 		fingerprint deviceId: "5A31", inClusters: "0x5E,0x26,0x85,0x59,0x72,0x86,0x5A,0x73,0x7A,0x6C,0x55,0x80", mfr: "26E", deviceJoinName: "Graber Somfy Shade"
 	}
+
 	preferences {
 		section("Scheduled Time") {
 			input name: "sched_time", type: "time", title: "Daily Battery Check Time: (Default 8:00 AM)", defaultValue: "08:00 AM"
@@ -84,8 +89,7 @@ metadata {
 	}
 }
 
-
-def getMaxOpen(){
+def getMaxOpen() {
     try {
 		max_open_int = max_open as Short
 		if((max_open_int > 99 || max_open_int < 0)) {
@@ -100,7 +104,8 @@ def getMaxOpen(){
     
     return 99
 }
-def getMaxClosed(){
+
+def getMaxClosed() {
     try {
     	max_close_int = max_close as Short
 		if((max_close_int > 99 || max_close_int < 0)) {
@@ -116,7 +121,7 @@ def getMaxClosed(){
     return 0
 }
 
-def batteryMaxLevel(){
+def batteryMaxLevel() {
 	 try {
     	battery_max = battery_max_percent as Short
 		if((battery_max > 100 || battery_max < 0)) {
@@ -124,8 +129,7 @@ def batteryMaxLevel(){
 		} else {
 			return battery_max
 		}
-    }
-    catch(e) {
+    } catch(e) {
         log("unhandled error in batteryMaxLevel: ${e.getLocalizedMessage()}", "error")
     }
     
@@ -136,22 +140,19 @@ def batteryMaxLevel(){
  * Boilerplate callback methods called by the framework
  */
 
-void installed()
-{
+void installed() {
 	log("installed() called", "trace")
 	setVersion()
 	initialize()
 }
 
-void updated()
-{
+void updated() {
 	log("updated() called", "trace")
 	setVersion()
 	initialize()
 }
 
-void parse(String message)
-{
+void parse(String message) {
 	log("parse called with message: ${message}", "trace")
 	hubitat.zwave.Command cmd = zwave.parse(message, commandClassVersions)
 	if (cmd) {
@@ -170,13 +171,12 @@ void initialize() {
 	scheduleBatteryReport()
 }
 
-void refresh()
-{
+void refresh() {
 	log("refresh called", "trace")
 	delayBetween([
 			getBatteryReport(),
 			getPositionReport()
-	], 200)
+		], 200)
 }
 
 def open() {
@@ -200,12 +200,12 @@ def off() {
 }
 
 //To support it as a dimmer switch.
-def setLevel(value, duration){
+def setLevel(value, duration) {
 	log("setLevel() called", "trace")
     setShadeLevel(value)
 }
 
-def setLevel(value){
+def setLevel(value) {
 	log("setLevel() called", "trace")
     setShadeLevel(value)
 }
@@ -224,10 +224,32 @@ def stopPositionChange() {
 	log("stopPositionChange() called", "trace")
 	try {
 		sendHubCommand(new hubitat.device.HubAction(zwave.switchMultilevelV1.switchMultilevelStopLevelChange().format(), hubitat.device.Protocol.ZWAVE))
-	}
-	catch(e) {
+	} catch(e) {
 		log("unhandled error: ${e.getLocalizedMessage()}", "error")
 	}
+}
+
+def startLevelChange(position) {
+	log("startLevelChange() called with position: ${position}", "trace")
+
+	String pos
+	switch (position.toUpperCase()) {
+		case "UP":
+			pos = "open"
+			break
+		case "DOWN":
+			pos = "close"
+			break
+		default:
+			throw new Exception("Invalid position value specified")
+	}
+
+	startPositionChange(pos)
+}
+
+def stopLevelChange() {
+	log("stopLevelChange() called", "trace")
+	stopPositionChange()
 }
 
 ///
@@ -259,13 +281,13 @@ def zwaveEvent(hubitat.zwave.commands.batteryv1.BatteryReport cmd) {
 	return []
 }
 
-def zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd){
+def zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd) {
 	log("SwitchMultilevelReport value: ${cmd.value}", "trace")
 	shadeEvents(cmd.value,"physical")
 	return []
 }
 
-def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd){
+def zwaveEvent(hubitat.zwave.commands.basicv1.BasicReport cmd) {
 	log("BasicReport value: ${cmd.value}", "trace")
 	shadeEvents(cmd.value,"digital")
 	return []
@@ -282,8 +304,7 @@ void getBatteryReport() {
 	log("getBatteryReport() called", "trace")
 	try {
 		sendHubCommand(new hubitat.device.HubAction(zwave.batteryV1.batteryGet().format(), hubitat.device.Protocol.ZWAVE))
-	}
-	catch(e) {
+	} catch(e) {
 		log("unhandled error: ${e.getLocalizedMessage()}", "error")
 	}
 }
@@ -301,25 +322,41 @@ private void scheduleBatteryReport() {
 	else {
 		dt =  Date.parse("HHmm", defaultTime)
 	}
+
 	def cronString = dt.format("ss mm HH") + " ? * *"
 	log("Scheduling Battery Refresh cronstring: ${cronString}", "info" )
 	schedule(cronString, getBatteryReport)
 }
 
-private void setShadeLevel(value)
-{
+private void setShadeLevel(value) {
+	Short curPos = device.currentValue("position")
 	Short level = Math.max(Math.min(value as Short, getMaxOpen()), getMaxClosed())
     log("Set Shade Level ${level}", "info")
-	try {
-		sendHubCommand(new hubitat.device.HubAction(zwave.switchMultilevelV1.switchMultilevelSet(value: level).format(), hubitat.device.Protocol.ZWAVE))
+
+	if (level == curPos) {
+		return // nothing to be done
 	}
-	catch(e) {
+
+	String shadeText
+	String positionText
+	if (curPos > level) {
+		shadeText = "closing"
+		positionText = "${device.getDisplayName()} is closing"
+	} else {
+		shadeText = "opening"
+		positionText = "${device.getDisplayName()} is opening"
+	}
+
+	try {
+		sendEvent(getEventMap("label", shadeText, null, null, positionText, true))
+		sendEvent(getEventMap("windowShade", shadeText, null, null, positionText, true))
+		sendHubCommand(new hubitat.device.HubAction(zwave.switchMultilevelV1.switchMultilevelSet(value: level).format(), hubitat.device.Protocol.ZWAVE))
+	} catch(e) {
 		log("unhandled error: ${e.getLocalizedMessage()}", "error")
 	}
 }
 
-private void startLevelChangeHelper(String position)
-{
+private void startLevelChangeHelper(String position) {
 	Short posValue = 0
 	Short curPos = device.currentValue("position")
 	if (position.equalsIgnoreCase("open")) {
@@ -329,17 +366,30 @@ private void startLevelChangeHelper(String position)
 	} else {
 		throw new Exception("Invalid position value specified")
 	}
+
 	if (posValue == curPos) {
 		return // nothing to be done
 	}
+
 	// false if increasing, true if decreasing
 	Boolean upDn = (curPos >= posValue)
 
+	String shadeText
+	String positionText
+	if (!upDn) {
+		shadeText = "opening"
+		positionText = "${device.getDisplayName()} is opening"
+	} else {
+		shadeText = "closing"
+		positionText = "${device.getDisplayName()} is closing"
+	}
+
 	try {
+		sendEvent(getEventMap("label", shadeText, null, null, positionText, true))
+		sendEvent(getEventMap("windowShade", shadeText, null, null, positionText, true))
 		sendHubCommand(new hubitat.device.HubAction(zwave.switchMultilevelV1.switchMultilevelStartLevelChange(ignoreStartLevel: true,
 				startLevel: 0, upDown: upDn).format(), hubitat.device.Protocol.ZWAVE))
-	}
-	catch(e) {
+	} catch(e) {
 		log("unhandled error: ${e.getLocalizedMessage()}", "error")
 	}
 }
@@ -348,15 +398,14 @@ private void getPositionReport() {
 	log("getPositionReport() called", "trace")
 	try {
 		sendHubCommand(new hubitat.device.HubAction(zwave.switchMultilevelV1.switchMultilevelGet().format(), hubitat.device.Protocol.ZWAVE))
-	}
-	catch(e) {
+	} catch(e) {
 		log("unhandled error: ${e.getLocalizedMessage()}", "error")
 	}
 }
 
 private shadeEvents(value, String type) {
 	Short positionVal = value
-	String positionText;
+	String positionText
 	String switchText
 	String shadeText
 	if (positionVal+1 >= getMaxOpen()) { // e.g. 94 + 1 >= 95 (Set Value)  -- it tends to be 1% off 
@@ -371,11 +420,12 @@ private shadeEvents(value, String type) {
 		positionText = "${device.getDisplayName()} is partially open"
 		shadeText = "partially open"
 	}
+
+	log("${positionText}", "debug")
 	sendEvent(getEventMap("position", positionVal, "%", null, positionText, true))
     sendEvent(getEventMap("level", positionVal, "%", null, positionText, true)) //Save the Level & shadeLevel to support all edge cases
     sendEvent(getEventMap("shadeLevel", positionVal, "%", null, positionText, true))
     sendEvent(getEventMap("label", shadeText, null, null, positionText, true))
-	log("${positionText}", "debug")
 	sendEvent(getEventMap("switch", switchText, null, null, null,true))
 	sendEvent(getEventMap("windowShade", shadeText, null, null, positionText, true))
 }
